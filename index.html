@@ -2,13 +2,13 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>최고네집공부방</title>
+<title>공부 트래커</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body { font-family: sans-serif; padding:20px; }
 .card { border:1px solid #ddd; padding:10px; margin:10px 0; }
-
-.small { width:250px; height:250px; } /* ✅ 1/4 사이즈 */
+.small { width:250px; height:250px; }
+input[type="number"] { width:60px; }
 </style>
 </head>
 <body>
@@ -33,7 +33,7 @@ body { font-family: sans-serif; padding:20px; }
 <h3>한달 진척도</h3>
 <canvas id="monthChart" class="small"></canvas>
 
-<h3>듣기</h3>
+<h3>듣기 (집중 / 흘려)</h3>
 <canvas id="listenChart" class="small"></canvas>
 
 <script>
@@ -41,14 +41,7 @@ let data = JSON.parse(localStorage.getItem("study")) || {};
 let selectedDate=null;
 let todayChart, monthChart, listenChart;
 
-// 구조
-// data[user] = {
-//   subjects: ["영어","수학"],
-//   logs: {
-//      "2026-03-22": { 영어:[...], 수학:[...] }
-//   }
-// }
-
+// 저장
 function save(){
  localStorage.setItem("study",JSON.stringify(data));
  render();
@@ -111,7 +104,7 @@ function curLog(){
  return data[u].logs[selectedDate];
 }
 
-// 과목 (🔥 핵심 수정)
+// 과목
 function addSubject(){
  let s=subjectInput.value.trim();
  let u=curUser();
@@ -132,16 +125,26 @@ function addTask(subject){
 
  if(!log[subject]) log[subject]=[];
 
- let name=prompt("학습명");
- let part=prompt("파트");
- let min=prompt("분");
+ let name=prompt("학습명 (집중듣기 / 흘려듣기 / 문제풀이 등)");
+ if(!name)return;
+
+ let part=prompt("어느 파트?");
+ let min=0;
 
  log[subject].push({
-  name, part,
-  minutes:Number(min)||0,
+  name,
+  part,
+  minutes:min,
   done:false
  });
 
+ save();
+}
+
+// 분 업데이트 (🔥 추가된 핵심)
+function updateMinutes(subject, index, value){
+ let log=curLog();
+ log[subject][index].minutes = Number(value) || 0;
  save();
 }
 
@@ -172,12 +175,27 @@ function render(){
      total++;
      if(t.done) done++;
 
+     let isListening = t.name.includes("집중") || t.name.includes("흘려");
+
      html+=`
      <label>
      <input type="checkbox" ${t.done?"checked":""}
      onclick="toggle('${s}',${i})">
-     ${t.name} (${t.minutes}분)
-     </label><br>`;
+     ${t.name} (${t.part||""})
+     </label>
+     `;
+
+     // 🎧 듣기면 입력칸
+     if(isListening){
+       html+=`
+       <input type="number" value="${t.minutes||0}" 
+       onchange="updateMinutes('${s}',${i}, this.value)"> 분
+       `;
+     } else {
+       html+=` (${t.minutes||0}분)`;
+     }
+
+     html+=`<br>`;
    });
 
    html+="</div>";
@@ -284,8 +302,8 @@ function drawListen(){
   data:{
    labels:days,
    datasets:[
-    {label:"집중", data:f},
-    {label:"흘려", data:p}
+    {label:"집중듣기", data:f},
+    {label:"흘려듣기", data:p}
    ]
   },
   options:{responsive:false}
