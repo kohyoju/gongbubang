@@ -10,12 +10,9 @@ body { font-family: sans-serif; padding:20px; }
 .card { border:1px solid #ddd; padding:10px; margin:10px 0; }
 
 .big-wrapper { width:700px; height:350px; }
-canvas { width:100% !important; height:100% !important; }
-
 .today-box { width:180px; height:180px; }
 
-.percent { font-size:20px; margin-top:10px; }
-.celebrate { font-size:22px; color:green; font-weight:bold; }
+canvas { width:100% !important; height:100% !important; }
 </style>
 </head>
 <body>
@@ -36,10 +33,8 @@ canvas { width:100% !important; height:100% !important; }
 <div id="subjects"></div>
 
 <h3>오늘</h3>
-<div class="today-box">
-  <canvas id="todayChart"></canvas>
-</div>
-<div id="todayPercent" class="percent"></div>
+<div class="today-box"><canvas id="todayChart"></canvas></div>
+<div id="todayPercent"></div>
 <div id="celebrate"></div>
 
 <h3>📊 한달 진척도</h3>
@@ -53,21 +48,18 @@ let data = JSON.parse(localStorage.getItem("study")) || {};
 let selectedDate=null;
 let todayChart, monthChart, listenChart;
 
-// 🎨 아이별 색상
-const colors = ["#ff6384","#36a2eb","#4caf50","#ff9800","#9c27b0","#00bcd4"];
+const colors=["#ff6384","#36a2eb","#4caf50","#ff9800"];
 
 function getColor(name){
- let index = Object.keys(data).indexOf(name);
- return colors[index % colors.length];
+ let i=Object.keys(data).indexOf(name);
+ return colors[i%colors.length];
 }
 
-// 저장
 function save(){
  localStorage.setItem("study",JSON.stringify(data));
  render();
 }
 
-// 사용자
 function addUser(){
  let n=userInput.value.trim();
  if(!n)return;
@@ -77,17 +69,23 @@ function addUser(){
  }
 
  updateUser();
+ userSelect.value=n;
+ setToday();
  save();
 }
 
 function updateUser(){
  userSelect.innerHTML="";
  for(let u in data){
-   userSelect.innerHTML+=`<option>${u}</option>`;
+   userSelect.innerHTML+=`<option value="${u}">${u}</option>`;
+ }
+
+ // ✅ 자동 선택
+ if(userSelect.options.length>0){
+   userSelect.selectedIndex=0;
  }
 }
 
-// 날짜
 function genDates(){
  let t=new Date();
  dates.innerHTML="";
@@ -101,14 +99,22 @@ function genDates(){
  }
 }
 
+function setToday(){
+ let t=new Date();
+ selectedDate=t.toISOString().slice(0,10);
+}
+
 function pick(d){
  selectedDate=d;
  render();
 }
 
-// 현재 로그
+function curUser(){
+ return userSelect.value;
+}
+
 function curLog(){
- let u=userSelect.value;
+ let u=curUser();
  if(!u||!selectedDate)return null;
 
  if(!data[u].logs[selectedDate]){
@@ -118,34 +124,21 @@ function curLog(){
  return data[u].logs[selectedDate];
 }
 
-// 과목
 function addSubject(){
  let s=subjectInput.value.trim();
- let u=userSelect.value;
+ let u=curUser();
  if(!s||!u)return;
 
  if(!data[u].subjects[s]){
    data[u].subjects[s]=[];
  }
 
+ subjectInput.value="";
  save();
 }
 
-// 과목 삭제
-function deleteSubject(s){
- let u=userSelect.value;
- delete data[u].subjects[s];
-
- for(let d in data[u].logs){
-   delete data[u].logs[d][s];
- }
-
- save();
-}
-
-// 학습 추가
 function addTask(subject){
- let u=userSelect.value;
+ let u=curUser();
  let name=prompt("학습명");
  if(!name)return;
 
@@ -156,22 +149,15 @@ function addTask(subject){
  save();
 }
 
-// 학습 삭제
 function deleteTask(subject,task){
- let u=userSelect.value;
- data[u].subjects[subject] =
-  data[u].subjects[subject].filter(t=>t!==task);
+ let u=curUser();
 
- for(let d in data[u].logs){
-   if(data[u].logs[d][subject]){
-     delete data[u].logs[d][subject][task];
-   }
- }
+ data[u].subjects[subject] =
+ data[u].subjects[subject].filter(t=>t!==task);
 
  save();
 }
 
-// 체크
 function toggle(subject,task){
  let log=curLog();
  if(!log[subject]) log[subject]={};
@@ -183,7 +169,6 @@ function toggle(subject,task){
  save();
 }
 
-// 시간 입력
 function updateMin(subject,task,val){
  let log=curLog();
  if(!log[subject]) log[subject]={};
@@ -195,9 +180,8 @@ function updateMin(subject,task,val){
  save();
 }
 
-// 화면
 function render(){
- let u=userSelect.value;
+ let u=curUser();
  if(!u)return;
 
  let log=curLog();
@@ -207,17 +191,16 @@ function render(){
 
  for(let s in data[u].subjects){
    let html=`<div class="card"><b>${s}</b>
-   <button onclick="deleteSubject('${s}')">❌</button><br>
    <button onclick="addTask('${s}')">학습추가</button><br>`;
 
    data[u].subjects[s].forEach(t=>{
      let info = log?.[s]?.[t] || {done:false, minutes:0};
 
-     let isListening = (s==="영어") &&
-      (t.includes("집중") || t.includes("흘려"));
-
      total++;
      if(info.done) done++;
+
+     let isListening = (s==="영어") &&
+      (t.includes("집중")||t.includes("흘려"));
 
      html+=`
      <label>
@@ -235,8 +218,7 @@ function render(){
      }
 
      html+=`
-     <button onclick="deleteTask('${s}','${t}')">❌</button>
-     <br>`;
+     <button onclick="deleteTask('${s}','${t}')">❌</button><br>`;
    });
 
    html+="</div>";
@@ -248,22 +230,15 @@ function render(){
  drawListen();
 }
 
-// 오늘 그래프 + % + 🎉
 function drawToday(done,total){
- let u=userSelect.value;
- let color = getColor(u);
+ let u=curUser();
+ let color=getColor(u);
 
- let percent = total ? Math.round(done/total*100) : 0;
+ let percent = total? Math.round(done/total*100):0;
+ todayPercent.innerText=`오늘 완료율: ${percent}%`;
 
- document.getElementById("todayPercent").innerText =
- `오늘 완료율: ${percent}%`;
-
- let celeb = document.getElementById("celebrate");
- if(percent===100 && total>0){
-   celeb.innerHTML = "🎉 오늘 목표 100% 달성! 최고야!";
- } else {
-   celeb.innerHTML = "";
- }
+ celebrate.innerHTML =
+ percent===100 && total>0 ? "🎉 100% 달성!" : "";
 
  let ctx=document.getElementById("todayChart").getContext("2d");
  if(todayChart) todayChart.destroy();
@@ -281,12 +256,9 @@ function drawToday(done,total){
  });
 }
 
-// 한달
 function drawMonth(){
- let u=userSelect.value;
+ let u=curUser();
  if(!u)return;
-
- let color = getColor(u);
 
  let days=[],vals=[];
  let t=new Date();
@@ -309,7 +281,7 @@ function drawMonth(){
   }
 
   days.unshift(s.slice(5));
-  vals.unshift(total? Math.round(done/total*100):0);
+  vals.unshift(total?Math.round(done/total*100):0);
  }
 
  let ctx=document.getElementById("monthChart").getContext("2d");
@@ -319,20 +291,17 @@ function drawMonth(){
   data:{
    labels:days,
    datasets:[
-    {type:"bar", data:vals, backgroundColor:color},
-    {type:"line", data:vals, borderColor:color}
+    {type:"bar", data:vals},
+    {type:"line", data:vals}
    ]
   },
   options:{responsive:true, maintainAspectRatio:false}
  });
 }
 
-// 듣기
 function drawListen(){
- let u=userSelect.value;
+ let u=curUser();
  if(!u)return;
-
- let color = getColor(u);
 
  let days=[],f=[],p=[];
  let t=new Date();
@@ -365,8 +334,8 @@ function drawListen(){
   data:{
    labels:days,
    datasets:[
-    {label:"집중", data:f, borderColor:color},
-    {label:"흘려", data:p, borderColor:"#999"}
+    {label:"집중", data:f},
+    {label:"흘려", data:p}
    ]
   },
   options:{responsive:true, maintainAspectRatio:false}
@@ -376,6 +345,7 @@ function drawListen(){
 // 시작
 updateUser();
 genDates();
+setToday();
 render();
 </script>
 
