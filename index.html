@@ -6,13 +6,16 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body { font-family: sans-serif; padding:20px; }
+
 .card { border:1px solid #ddd; padding:10px; margin:10px 0; }
 
 .big-wrapper { width:700px; height:350px; }
 canvas { width:100% !important; height:100% !important; }
 
-input[type="number"] { width:60px; }
-button { margin-left:5px; }
+.today-box { width:180px; height:180px; }
+
+.percent { font-size:20px; margin-top:10px; }
+.celebrate { font-size:22px; color:green; font-weight:bold; }
 </style>
 </head>
 <body>
@@ -32,6 +35,13 @@ button { margin-left:5px; }
 
 <div id="subjects"></div>
 
+<h3>오늘</h3>
+<div class="today-box">
+  <canvas id="todayChart"></canvas>
+</div>
+<div id="todayPercent" class="percent"></div>
+<div id="celebrate"></div>
+
 <h3>📊 한달 진척도</h3>
 <div class="big-wrapper"><canvas id="monthChart"></canvas></div>
 
@@ -41,7 +51,15 @@ button { margin-left:5px; }
 <script>
 let data = JSON.parse(localStorage.getItem("study")) || {};
 let selectedDate=null;
-let monthChart, listenChart;
+let todayChart, monthChart, listenChart;
+
+// 🎨 아이별 색상
+const colors = ["#ff6384","#36a2eb","#4caf50","#ff9800","#9c27b0","#00bcd4"];
+
+function getColor(name){
+ let index = Object.keys(data).indexOf(name);
+ return colors[index % colors.length];
+}
 
 // 저장
 function save(){
@@ -100,7 +118,7 @@ function curLog(){
  return data[u].logs[selectedDate];
 }
 
-// 과목 추가
+// 과목
 function addSubject(){
  let s=subjectInput.value.trim();
  let u=userSelect.value;
@@ -125,7 +143,7 @@ function deleteSubject(s){
  save();
 }
 
-// 학습 추가 (🔥 이제 고정됨)
+// 학습 추가
 function addTask(subject){
  let u=userSelect.value;
  let name=prompt("학습명");
@@ -138,7 +156,7 @@ function addTask(subject){
  save();
 }
 
-// 학습 삭제 (🔥 이제 제대로 삭제됨)
+// 학습 삭제
 function deleteTask(subject,task){
  let u=userSelect.value;
  data[u].subjects[subject] =
@@ -185,6 +203,8 @@ function render(){
  let log=curLog();
  subjects.innerHTML="";
 
+ let total=0, done=0;
+
  for(let s in data[u].subjects){
    let html=`<div class="card"><b>${s}</b>
    <button onclick="deleteSubject('${s}')">❌</button><br>
@@ -195,6 +215,9 @@ function render(){
 
      let isListening = (s==="영어") &&
       (t.includes("집중") || t.includes("흘려"));
+
+     total++;
+     if(info.done) done++;
 
      html+=`
      <label>
@@ -220,14 +243,50 @@ function render(){
    subjects.innerHTML+=html;
  }
 
+ drawToday(done,total);
  drawMonth();
  drawListen();
 }
 
-// 그래프 (이전과 동일)
+// 오늘 그래프 + % + 🎉
+function drawToday(done,total){
+ let u=userSelect.value;
+ let color = getColor(u);
+
+ let percent = total ? Math.round(done/total*100) : 0;
+
+ document.getElementById("todayPercent").innerText =
+ `오늘 완료율: ${percent}%`;
+
+ let celeb = document.getElementById("celebrate");
+ if(percent===100 && total>0){
+   celeb.innerHTML = "🎉 오늘 목표 100% 달성! 최고야!";
+ } else {
+   celeb.innerHTML = "";
+ }
+
+ let ctx=document.getElementById("todayChart").getContext("2d");
+ if(todayChart) todayChart.destroy();
+
+ todayChart=new Chart(ctx,{
+  type:"doughnut",
+  data:{
+    labels:["완료","미완료"],
+    datasets:[{
+      data:total?[done,total-done]:[0,1],
+      backgroundColor:[color,"#ddd"]
+    }]
+  },
+  options:{responsive:true, maintainAspectRatio:false}
+ });
+}
+
+// 한달
 function drawMonth(){
  let u=userSelect.value;
  if(!u)return;
+
+ let color = getColor(u);
 
  let days=[],vals=[];
  let t=new Date();
@@ -260,17 +319,20 @@ function drawMonth(){
   data:{
    labels:days,
    datasets:[
-    {type:"bar", data:vals},
-    {type:"line", data:vals}
+    {type:"bar", data:vals, backgroundColor:color},
+    {type:"line", data:vals, borderColor:color}
    ]
   },
   options:{responsive:true, maintainAspectRatio:false}
  });
 }
 
+// 듣기
 function drawListen(){
  let u=userSelect.value;
  if(!u)return;
+
+ let color = getColor(u);
 
  let days=[],f=[],p=[];
  let t=new Date();
@@ -303,8 +365,8 @@ function drawListen(){
   data:{
    labels:days,
    datasets:[
-    {label:"집중", data:f},
-    {label:"흘려", data:p}
+    {label:"집중", data:f, borderColor:color},
+    {label:"흘려", data:p, borderColor:"#999"}
    ]
   },
   options:{responsive:true, maintainAspectRatio:false}
