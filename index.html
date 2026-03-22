@@ -9,200 +9,215 @@ body { font-family: sans-serif; padding:20px; }
 
 .card { border:1px solid #ddd; padding:10px; margin:10px 0; }
 
-.big-wrapper { width:700px; height:350px; }
 .today-box { width:180px; height:180px; }
+.big-box { width:600px; height:300px; }
 
 canvas { width:100% !important; height:100% !important; }
+
+button { margin:3px; }
+input[type="number"] { width:60px; }
 </style>
 </head>
 <body>
 
 <h1>🏠 최고네집 공부방</h1>
 
-<input id="userInput">
-<button onclick="addUser()">이름 추가</button>
-<select id="userSelect" onchange="render()"></select>
+<input id="userInput" placeholder="이름">
+<button onclick="addUser()">추가</button>
+<select id="userSelect" onchange="initUser()"></select>
 
 <h3>📅 날짜</h3>
 <div id="dates"></div>
 
 <h3>📚 과목</h3>
-<input id="subjectInput">
+<input id="subjectInput" placeholder="과목">
 <button onclick="addSubject()">추가</button>
 
 <div id="subjects"></div>
 
 <h3>오늘</h3>
 <div class="today-box"><canvas id="todayChart"></canvas></div>
-<div id="todayPercent"></div>
-<div id="celebrate"></div>
+<div id="todayText"></div>
 
-<h3>📊 한달 진척도</h3>
-<div class="big-wrapper"><canvas id="monthChart"></canvas></div>
+<h3>📊 한달</h3>
+<div class="big-box"><canvas id="monthChart"></canvas></div>
 
 <h3>🎧 듣기</h3>
-<div class="big-wrapper"><canvas id="listenChart"></canvas></div>
+<div class="big-box"><canvas id="listenChart"></canvas></div>
 
 <script>
 let data = JSON.parse(localStorage.getItem("study")) || {};
-let selectedDate=null;
+let currentUser = null;
+let currentDate = null;
+
 let todayChart, monthChart, listenChart;
 
-const colors=["#ff6384","#36a2eb","#4caf50","#ff9800"];
-
-function getColor(name){
- let i=Object.keys(data).indexOf(name);
- return colors[i%colors.length];
-}
-
+// 저장
 function save(){
- localStorage.setItem("study",JSON.stringify(data));
- render();
+ localStorage.setItem("study", JSON.stringify(data));
 }
 
+// 사용자 추가
 function addUser(){
- let n=userInput.value.trim();
- if(!n)return;
+ let name = userInput.value.trim();
+ if(!name) return;
 
- if(!data[n]){
-   data[n]={subjects:{}, logs:{}};
+ if(!data[name]){
+   data[name] = {
+     subjects:{},
+     logs:{}
+   };
  }
 
- updateUser();
- userSelect.value=n;
- setToday();
- save();
+ userInput.value="";
+ refreshUsers();
+ userSelect.value = name;
+ initUser();
 }
 
-function updateUser(){
+// 사용자 목록
+function refreshUsers(){
  userSelect.innerHTML="";
- for(let u in data){
-   userSelect.innerHTML+=`<option value="${u}">${u}</option>`;
- }
-
- // ✅ 자동 선택
- if(userSelect.options.length>0){
-   userSelect.selectedIndex=0;
- }
+ Object.keys(data).forEach(u=>{
+   userSelect.innerHTML += `<option value="${u}">${u}</option>`;
+ });
 }
 
-function genDates(){
- let t=new Date();
+// 날짜 생성
+function makeDates(){
  dates.innerHTML="";
+ let today = new Date();
 
  for(let i=0;i<7;i++){
-  let d=new Date();
-  d.setDate(t.getDate()+i);
-  let s=d.toISOString().slice(0,10);
+   let d = new Date();
+   d.setDate(today.getDate()+i);
+   let str = d.toISOString().slice(0,10);
 
-  dates.innerHTML+=`<button onclick="pick('${s}')">${s.slice(5)}</button>`;
+   dates.innerHTML += `<button onclick="selectDate('${str}')">${str.slice(5)}</button>`;
  }
 }
 
-function setToday(){
- let t=new Date();
- selectedDate=t.toISOString().slice(0,10);
-}
-
-function pick(d){
- selectedDate=d;
+// 사용자 선택
+function initUser(){
+ currentUser = userSelect.value;
+ setToday();
  render();
 }
 
-function curUser(){
- return userSelect.value;
+// 오늘 날짜
+function setToday(){
+ let d = new Date();
+ currentDate = d.toISOString().slice(0,10);
 }
 
-function curLog(){
- let u=curUser();
- if(!u||!selectedDate)return null;
+// 날짜 선택
+function selectDate(d){
+ currentDate = d;
+ render();
+}
 
- if(!data[u].logs[selectedDate]){
-   data[u].logs[selectedDate]={};
+// 로그 가져오기
+function getLog(){
+ if(!data[currentUser].logs[currentDate]){
+   data[currentUser].logs[currentDate] = {};
  }
-
- return data[u].logs[selectedDate];
+ return data[currentUser].logs[currentDate];
 }
 
+// 과목 추가
 function addSubject(){
- let s=subjectInput.value.trim();
- let u=curUser();
- if(!s||!u)return;
+ let s = subjectInput.value.trim();
+ if(!s || !currentUser) return;
 
- if(!data[u].subjects[s]){
-   data[u].subjects[s]=[];
+ if(!data[currentUser].subjects[s]){
+   data[currentUser].subjects[s] = [];
  }
 
  subjectInput.value="";
  save();
+ render();
 }
 
+// 학습 추가
 function addTask(subject){
- let u=curUser();
- let name=prompt("학습명");
- if(!name)return;
+ let name = prompt("학습명");
+ if(!name) return;
 
- if(!data[u].subjects[subject].includes(name)){
-   data[u].subjects[subject].push(name);
+ let arr = data[currentUser].subjects[subject];
+ if(!arr.includes(name)){
+   arr.push(name);
  }
 
  save();
+ render();
 }
 
+// 삭제
 function deleteTask(subject,task){
- let u=curUser();
-
- data[u].subjects[subject] =
- data[u].subjects[subject].filter(t=>t!==task);
+ let arr = data[currentUser].subjects[subject];
+ data[currentUser].subjects[subject] =
+ arr.filter(t=>t!==task);
 
  save();
+ render();
 }
 
+// 체크
 function toggle(subject,task){
- let log=curLog();
+ let log = getLog();
+
  if(!log[subject]) log[subject]={};
  if(!log[subject][task]){
    log[subject][task]={done:false, minutes:0};
  }
 
- log[subject][task].done=!log[subject][task].done;
+ log[subject][task].done = !log[subject][task].done;
+
  save();
+ render();
 }
 
-function updateMin(subject,task,val){
- let log=curLog();
+// 시간
+function setMin(subject,task,val){
+ let log = getLog();
+
  if(!log[subject]) log[subject]={};
  if(!log[subject][task]){
    log[subject][task]={done:false, minutes:0};
  }
 
- log[subject][task].minutes=Number(val)||0;
+ log[subject][task].minutes = Number(val)||0;
+
  save();
 }
 
+// 화면
 function render(){
- let u=curUser();
- if(!u)return;
+ if(!currentUser) return;
 
- let log=curLog();
- subjects.innerHTML="";
+ let subjectsDiv = document.getElementById("subjects");
+ subjectsDiv.innerHTML="";
+
+ let log = getLog();
 
  let total=0, done=0;
 
- for(let s in data[u].subjects){
-   let html=`<div class="card"><b>${s}</b>
-   <button onclick="addTask('${s}')">학습추가</button><br>`;
+ for(let s in data[currentUser].subjects){
 
-   data[u].subjects[s].forEach(t=>{
+   let html = `<div class="card"><b>${s}</b>
+   <button onclick="addTask('${s}')">+학습</button><br>`;
+
+   data[currentUser].subjects[s].forEach(t=>{
+
      let info = log?.[s]?.[t] || {done:false, minutes:0};
 
      total++;
      if(info.done) done++;
 
-     let isListening = (s==="영어") &&
-      (t.includes("집중")||t.includes("흘려"));
+     let isListening = (s==="영어") && 
+       (t.includes("집중") || t.includes("흘려"));
 
-     html+=`
+     html += `
      <label>
      <input type="checkbox" ${info.done?"checked":""}
      onclick="toggle('${s}','${t}')">
@@ -211,18 +226,19 @@ function render(){
      `;
 
      if(isListening){
-       html+=`
+       html += `
        <input type="number" value="${info.minutes}"
-       onchange="updateMin('${s}','${t}',this.value)">분
+       onchange="setMin('${s}','${t}',this.value)">분
        `;
      }
 
-     html+=`
-     <button onclick="deleteTask('${s}','${t}')">❌</button><br>`;
+     html += `
+     <button onclick="deleteTask('${s}','${t}')">❌</button>
+     <br>`;
    });
 
-   html+="</div>";
-   subjects.innerHTML+=html;
+   html += "</div>";
+   subjectsDiv.innerHTML += html;
  }
 
  drawToday(done,total);
@@ -230,58 +246,50 @@ function render(){
  drawListen();
 }
 
+// 오늘
 function drawToday(done,total){
- let u=curUser();
- let color=getColor(u);
-
  let percent = total? Math.round(done/total*100):0;
- todayPercent.innerText=`오늘 완료율: ${percent}%`;
 
- celebrate.innerHTML =
- percent===100 && total>0 ? "🎉 100% 달성!" : "";
+ todayText.innerHTML = `오늘 완료율: ${percent}% 
+ ${percent===100 && total>0 ? "🎉" : ""}`;
 
- let ctx=document.getElementById("todayChart").getContext("2d");
+ let ctx = document.getElementById("todayChart").getContext("2d");
  if(todayChart) todayChart.destroy();
 
- todayChart=new Chart(ctx,{
+ todayChart = new Chart(ctx,{
   type:"doughnut",
   data:{
     labels:["완료","미완료"],
-    datasets:[{
-      data:total?[done,total-done]:[0,1],
-      backgroundColor:[color,"#ddd"]
-    }]
+    datasets:[{data:total?[done,total-done]:[0,1]}]
   },
   options:{responsive:true, maintainAspectRatio:false}
  });
 }
 
+// 한달
 function drawMonth(){
- let u=curUser();
- if(!u)return;
-
- let days=[],vals=[];
- let t=new Date();
+ let days=[], vals=[];
+ let today = new Date();
 
  for(let i=0;i<30;i++){
-  let d=new Date();
-  d.setDate(t.getDate()-i);
-  let s=d.toISOString().slice(0,10);
+   let d=new Date();
+   d.setDate(today.getDate()-i);
+   let key=d.toISOString().slice(0,10);
 
-  let day=data[u].logs[s];
-  let total=0, done=0;
+   let day = data[currentUser].logs[key];
+   let total=0, done=0;
 
-  if(day){
-   for(let sub in day){
-    for(let task in day[sub]){
-     total++;
-     if(day[sub][task].done) done++;
-    }
+   if(day){
+     for(let s in day){
+       for(let t in day[s]){
+         total++;
+         if(day[s][t].done) done++;
+       }
+     }
    }
-  }
 
-  days.unshift(s.slice(5));
-  vals.unshift(total?Math.round(done/total*100):0);
+   days.unshift(key.slice(5));
+   vals.unshift(total? Math.round(done/total*100):0);
  }
 
  let ctx=document.getElementById("monthChart").getContext("2d");
@@ -289,41 +297,39 @@ function drawMonth(){
 
  monthChart=new Chart(ctx,{
   data:{
-   labels:days,
-   datasets:[
-    {type:"bar", data:vals},
-    {type:"line", data:vals}
-   ]
+    labels:days,
+    datasets:[
+      {type:"bar", data:vals},
+      {type:"line", data:vals}
+    ]
   },
   options:{responsive:true, maintainAspectRatio:false}
  });
 }
 
+// 듣기
 function drawListen(){
- let u=curUser();
- if(!u)return;
-
- let days=[],f=[],p=[];
- let t=new Date();
+ let days=[], f=[], p=[];
+ let today=new Date();
 
  for(let i=0;i<30;i++){
-  let d=new Date();
-  d.setDate(t.getDate()-i);
-  let s=d.toISOString().slice(0,10);
+   let d=new Date();
+   d.setDate(today.getDate()-i);
+   let key=d.toISOString().slice(0,10);
 
-  let day=data[u].logs[s];
-  let ff=0,pp=0;
+   let day=data[currentUser].logs[key];
+   let ff=0,pp=0;
 
-  if(day && day["영어"]){
-   for(let task in day["영어"]){
-     if(task.includes("집중")) ff+=day["영어"][task].minutes;
-     if(task.includes("흘려")) pp+=day["영어"][task].minutes;
+   if(day && day["영어"]){
+     for(let t in day["영어"]){
+       if(t.includes("집중")) ff+=day["영어"][t].minutes;
+       if(t.includes("흘려")) pp+=day["영어"][t].minutes;
+     }
    }
-  }
 
-  days.unshift(s.slice(5));
-  f.unshift(ff);
-  p.unshift(pp);
+   days.unshift(key.slice(5));
+   f.unshift(ff);
+   p.unshift(pp);
  }
 
  let ctx=document.getElementById("listenChart").getContext("2d");
@@ -332,21 +338,24 @@ function drawListen(){
  listenChart=new Chart(ctx,{
   type:"line",
   data:{
-   labels:days,
-   datasets:[
-    {label:"집중", data:f},
-    {label:"흘려", data:p}
-   ]
+    labels:days,
+    datasets:[
+      {label:"집중", data:f},
+      {label:"흘려", data:p}
+    ]
   },
   options:{responsive:true, maintainAspectRatio:false}
  });
 }
 
 // 시작
-updateUser();
-genDates();
-setToday();
-render();
+refreshUsers();
+makeDates();
+
+if(Object.keys(data).length>0){
+ userSelect.selectedIndex=0;
+ initUser();
+}
 </script>
 
 </body>
