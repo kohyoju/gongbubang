@@ -21,15 +21,12 @@ button { margin:5px; }
 
 <div id="subjects"></div>
 
-<h2>오늘 공부 체크</h2>
-<input type="date" id="date">
-<div id="studyArea"></div>
-
 <h2>📊 전체 진척도</h2>
 <canvas id="progressChart"></canvas>
 
 <script>
 let data = JSON.parse(localStorage.getItem("studyData")) || {};
+let chart; // ✅ 차트 변수 따로 관리
 
 function save() {
     localStorage.setItem("studyData", JSON.stringify(data));
@@ -37,15 +34,22 @@ function save() {
 }
 
 function addSubject() {
-    const subject = document.getElementById("subjectInput").value;
+    const input = document.getElementById("subjectInput");
+    const subject = input.value.trim();
     if (!subject) return;
-    data[subject] = [];
+
+    if (!data[subject]) { // ✅ 중복 방지
+        data[subject] = [];
+    }
+
+    input.value = ""; // ✅ 입력창 초기화
     save();
 }
 
 function addTask(subject) {
     const task = prompt("학습 내용 입력");
     if (!task) return;
+
     data[subject].push({ name: task, done: false });
     save();
 }
@@ -57,9 +61,7 @@ function toggleTask(subject, index) {
 
 function render() {
     const subjectsDiv = document.getElementById("subjects");
-    const studyArea = document.getElementById("studyArea");
     subjectsDiv.innerHTML = "";
-    studyArea.innerHTML = "";
 
     let total = 0, done = 0;
 
@@ -87,15 +89,19 @@ function render() {
 }
 
 function renderChart(done, total) {
-    const ctx = document.getElementById('progressChart');
-    if (!ctx) return;
+    const ctx = document.getElementById('progressChart').getContext('2d');
 
-    new Chart(ctx, {
+    // ✅ 기존 차트 삭제 (중요)
+    if (chart) {
+        chart.destroy();
+    }
+
+    chart = new Chart(ctx, {
         type: 'doughnut',
         data: {
             labels: ['완료', '미완료'],
             datasets: [{
-                data: [done, total - done]
+                data: total === 0 ? [0, 1] : [done, total - done]
             }]
         }
     });
