@@ -9,10 +9,20 @@ body { font-family: sans-serif; padding:20px; }
 .card { border:1px solid #ddd; padding:10px; margin:10px 0; }
 
 .small { width:250px; height:250px; }
-.big { width:500px; height:300px; } /* ✅ 2배 확대 */
+
+/* ✅ 진짜 크게 보이게 */
+.big-wrapper {
+  width:700px;
+  height:350px;
+}
+
+canvas {
+  width:100% !important;
+  height:100% !important;
+}
 
 input[type="number"] { width:60px; margin-left:5px; }
-.report { border:1px solid #aaa; padding:10px; margin-top:15px; }
+button { margin-left:5px; }
 </style>
 </head>
 <body>
@@ -35,13 +45,14 @@ input[type="number"] { width:60px; margin-left:5px; }
 <canvas id="todayChart" class="small"></canvas>
 
 <h3>📊 한달 진척도</h3>
-<canvas id="monthChart" class="big"></canvas>
+<div class="big-wrapper">
+<canvas id="monthChart"></canvas>
+</div>
 
-<h3>🎧 듣기 그래프</h3>
-<canvas id="listenChart" class="big"></canvas>
-
-<h3>📄 주간 리포트</h3>
-<div id="report" class="report"></div>
+<h3>🎧 듣기</h3>
+<div class="big-wrapper">
+<canvas id="listenChart"></canvas>
+</div>
 
 <script>
 let data = JSON.parse(localStorage.getItem("study")) || {};
@@ -109,7 +120,7 @@ function curLog(){
  return data[u].logs[selectedDate];
 }
 
-// 과목
+// 과목 추가
 function addSubject(){
  let s=subjectInput.value.trim();
  let u=curUser();
@@ -123,6 +134,37 @@ function addSubject(){
  save();
 }
 
+// 🔥 과목 삭제
+function deleteSubject(subject){
+ let u=curUser();
+ data[u].subjects = data[u].subjects.filter(s=>s!==subject);
+
+ // 로그에서도 제거
+ for(let d in data[u].logs){
+   delete data[u].logs[d][subject];
+ }
+
+ save();
+}
+
+// 🔥 과목 이름 수정
+function editSubject(oldName){
+ let u=curUser();
+ let newName = prompt("새 과목명", oldName);
+ if(!newName) return;
+
+ data[u].subjects = data[u].subjects.map(s=>s===oldName?newName:s);
+
+ for(let d in data[u].logs){
+   if(data[u].logs[d][oldName]){
+     data[u].logs[d][newName]=data[u].logs[d][oldName];
+     delete data[u].logs[d][oldName];
+   }
+ }
+
+ save();
+}
+
 // 내용 추가
 function addTask(subject){
  let log=curLog();
@@ -130,25 +172,45 @@ function addTask(subject){
 
  if(!log[subject]) log[subject]=[];
 
- let name=prompt("학습명 (집중듣기 / 흘려듣기 / 문제풀이 등)");
+ let name=prompt("학습명");
  if(!name)return;
 
  let part=prompt("파트");
 
  log[subject].push({
-  name,
-  part,
-  minutes:0,
-  done:false
+  name, part, minutes:0, done:false
  });
 
  save();
 }
 
-// 분 업데이트
-function updateMinutes(subject, index, value){
+// 🔥 내용 삭제
+function deleteTask(subject,i){
  let log=curLog();
- log[subject][index].minutes = Number(value) || 0;
+ log[subject].splice(i,1);
+ save();
+}
+
+// 🔥 내용 수정
+function editTask(subject,i){
+ let log=curLog();
+ let t=log[subject][i];
+
+ let newName=prompt("학습명",t.name);
+ if(!newName)return;
+
+ let newPart=prompt("파트",t.part);
+
+ t.name=newName;
+ t.part=newPart;
+
+ save();
+}
+
+// 분 업데이트
+function updateMinutes(subject,i,value){
+ let log=curLog();
+ log[subject][i].minutes = Number(value)||0;
  save();
 }
 
@@ -170,7 +232,10 @@ function render(){
  let total=0, done=0;
 
  data[u].subjects.forEach(s=>{
-   let html=`<div class="card"><b>${s}</b>
+   let html=`<div class="card">
+   <b>${s}</b>
+   <button onclick="editSubject('${s}')">✏️</button>
+   <button onclick="deleteSubject('${s}')">❌</button><br>
    <button onclick="addTask('${s}')">추가</button><br>`;
 
    let arr = log && log[s] ? log[s] : [];
@@ -179,9 +244,8 @@ function render(){
      total++;
      if(t.done) done++;
 
-     // 🎯 조건: 영어 + (집중/흘려)
-     let isListening = (s==="영어") && 
-       (t.name.includes("집중") || t.name.includes("흘려"));
+     let isListening = (s==="영어") &&
+      (t.name.includes("집중") || t.name.includes("흘려"));
 
      html+=`
      <label>
@@ -193,12 +257,15 @@ function render(){
 
      if(isListening){
        html+=`
-       <input type="number" value="${t.minutes||0}" 
+       <input type="number" value="${t.minutes||0}"
        onchange="updateMinutes('${s}',${i}, this.value)">분
        `;
      }
 
-     html+=`<br>`;
+     html+=`
+     <button onclick="editTask('${s}',${i})">✏️</button>
+     <button onclick="deleteTask('${s}',${i})">❌</button>
+     <br>`;
    });
 
    html+="</div>";
@@ -208,7 +275,6 @@ function render(){
  drawToday(done,total);
  drawMonth();
  drawListen();
- drawReport();
 }
 
 // 오늘
@@ -264,7 +330,10 @@ function drawMonth(){
     {type:"line", data:vals}
    ]
   },
-  options:{responsive:false}
+  options:{
+    responsive:true,
+    maintainAspectRatio:false
+  }
  });
 }
 
@@ -285,13 +354,11 @@ function drawListen(){
   let ff=0,pp=0;
 
   if(day){
-   for(let sub in day){
-    if(sub==="영어"){
-     day[sub].forEach(t=>{
+   if(day["영어"]){
+     day["영어"].forEach(t=>{
       if(t.name.includes("집중")) ff+=t.minutes||0;
       if(t.name.includes("흘려")) pp+=t.minutes||0;
      });
-    }
    }
   }
 
@@ -312,43 +379,11 @@ function drawListen(){
     {label:"흘려듣기", data:p}
    ]
   },
-  options:{responsive:false}
- });
-}
-
-// 📄 주간 리포트
-function drawReport(){
- let u=curUser();
- if(!u)return;
-
- let t=new Date();
- let totalMin=0;
- let focus=0, passive=0;
-
- for(let i=0;i<7;i++){
-  let d=new Date();
-  d.setDate(t.getDate()-i);
-  let s=d.toISOString().slice(0,10);
-
-  let day=data[u].logs[s];
-
-  if(day){
-   for(let sub in day){
-    day[sub].forEach(t=>{
-      totalMin+=t.minutes||0;
-      if(t.name.includes("집중")) focus+=t.minutes||0;
-      if(t.name.includes("흘려")) passive+=t.minutes||0;
-    });
-   }
+  options:{
+    responsive:true,
+    maintainAspectRatio:false
   }
- }
-
- report.innerHTML = `
- <b>📊 주간 요약</b><br>
- 총 공부시간: ${totalMin}분<br>
- 집중듣기: ${focus}분<br>
- 흘려듣기: ${passive}분<br>
- `;
+ });
 }
 
 // 시작
