@@ -2,149 +2,317 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>최고네집 공부방</title>
+<title>공부 트래커</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body { font-family: sans-serif; padding:20px; }
 .card { border:1px solid #ddd; padding:10px; margin:10px 0; }
-button { margin:3px; }
+.small { width:250px; height:250px; }
+input[type="number"] { width:60px; }
 </style>
 </head>
 <body>
 
-<h1>🏠 최고네집 공부방</h1>
-
-<h3>👤 사용자</h3>
+<h2>👤 이름</h2>
 <input id="userInput">
 <button onclick="addUser()">추가</button>
-<select id="userSelect" onchange="changeUser()"></select>
+<select id="userSelect" onchange="render()"></select>
 
-<h3>📅 날짜</h3>
+<h2>📅 날짜</h2>
 <div id="dates"></div>
 
-<h3>📚 과목</h3>
+<h2>📚 과목 (한번만 추가)</h2>
 <input id="subjectInput">
 <button onclick="addSubject()">추가</button>
 
 <div id="subjects"></div>
 
+<h3>오늘</h3>
+<canvas id="todayChart" class="small"></canvas>
+
+<h3>한달 진척도</h3>
+<canvas id="monthChart" class="small"></canvas>
+
+<h3>듣기 (집중 / 흘려)</h3>
+<canvas id="listenChart" class="small"></canvas>
+
 <script>
 let data = JSON.parse(localStorage.getItem("study")) || {};
-let currentUser=null;
-let currentDate=null;
+let selectedDate=null;
+let todayChart, monthChart, listenChart;
 
 // 저장
 function save(){
- localStorage.setItem("study", JSON.stringify(data));
+ localStorage.setItem("study",JSON.stringify(data));
+ render();
 }
 
-// 최초 기본 사용자 생성
-function ensureUser(){
- if(Object.keys(data).length===0){
-   data["기본"] = {subjects:{}, logs:{}};
- }
-}
-
-// 사용자 추가
+// 사용자
 function addUser(){
- let name=userInput.value.trim();
- if(!name)return;
+ let n=userInput.value.trim();
+ if(!n)return;
 
- data[name]={subjects:{}, logs:{}};
+ if(!data[n]){
+   data[n]={subjects:[], logs:{}};
+ }
+
  userInput.value="";
- refreshUsers();
- currentUser=name;
+ updateUser();
  save();
- render();
 }
 
-// 사용자 목록
-function refreshUsers(){
+function updateUser(){
  userSelect.innerHTML="";
- Object.keys(data).forEach(u=>{
+ for(let u in data){
    userSelect.innerHTML+=`<option>${u}</option>`;
- });
-}
-
-// 사용자 변경
-function changeUser(){
- currentUser=userSelect.value;
- render();
+ }
 }
 
 // 날짜
-function makeDates(){
+function genDates(){
  let t=new Date();
  dates.innerHTML="";
- for(let i=0;i<7;i++){
-   let d=new Date();
-   d.setDate(t.getDate()+i);
-   let s=d.toISOString().slice(0,10);
 
-   dates.innerHTML+=`<button onclick="pick('${s}')">${s.slice(5)}</button>`;
+ for(let i=0;i<7;i++){
+  let d=new Date();
+  d.setDate(t.getDate()+i);
+  let s=d.toISOString().slice(0,10);
+
+  dates.innerHTML+=
+  `<button onclick="pick('${s}')">${s.slice(5)}</button>`;
  }
 }
 
-// 날짜 선택
 function pick(d){
- currentDate=d;
+ selectedDate=d;
  render();
 }
 
-// 로그
-function getLog(){
- if(!data[currentUser].logs[currentDate]){
-   data[currentUser].logs[currentDate]={};
- }
- return data[currentUser].logs[currentDate];
+// 현재
+function curUser(){
+ return userSelect.value;
 }
 
-// 🔥 과목 추가 (완전 안정)
+function curLog(){
+ let u=curUser();
+ if(!u||!selectedDate)return null;
+
+ if(!data[u].logs[selectedDate]){
+   data[u].logs[selectedDate]={};
+ }
+
+ return data[u].logs[selectedDate];
+}
+
+// 과목
 function addSubject(){
- if(!currentUser){
-   alert("먼저 이름 추가하거나 선택해줘!");
-   return;
- }
-
  let s=subjectInput.value.trim();
- if(!s){
-   alert("과목 입력해줘!");
-   return;
- }
+ let u=curUser();
+ if(!s||!u)return;
 
- if(!data[currentUser].subjects[s]){
-   data[currentUser].subjects[s]=[];
+ if(!data[u].subjects.includes(s)){
+   data[u].subjects.push(s);
  }
 
  subjectInput.value="";
  save();
- render();
+}
+
+// 내용 추가
+function addTask(subject){
+ let log=curLog();
+ if(!log)return;
+
+ if(!log[subject]) log[subject]=[];
+
+ let name=prompt("학습명 (집중듣기 / 흘려듣기 / 문제풀이 등)");
+ if(!name)return;
+
+ let part=prompt("어느 파트?");
+ let min=0;
+
+ log[subject].push({
+  name,
+  part,
+  minutes:min,
+  done:false
+ });
+
+ save();
+}
+
+// 분 업데이트 (🔥 추가된 핵심)
+function updateMinutes(subject, index, value){
+ let log=curLog();
+ log[subject][index].minutes = Number(value) || 0;
+ save();
+}
+
+// 체크
+function toggle(subject,i){
+ let log=curLog();
+ log[subject][i].done=!log[subject][i].done;
+ save();
 }
 
 // 화면
 function render(){
- if(!currentUser)return;
+ let u=curUser();
+ if(!u)return;
 
- let div=document.getElementById("subjects");
- div.innerHTML="";
+ let log=curLog();
+ subjects.innerHTML="";
 
- let subjects=data[currentUser].subjects;
+ let total=0, done=0;
 
- for(let s in subjects){
-   div.innerHTML+=`<div class="card">${s}</div>`;
+ data[u].subjects.forEach(s=>{
+   let html=`<div class="card"><b>${s}</b>
+   <button onclick="addTask('${s}')">추가</button><br>`;
+
+   let arr = log && log[s] ? log[s] : [];
+
+   arr.forEach((t,i)=>{
+     total++;
+     if(t.done) done++;
+
+     let isListening = t.name.includes("집중") || t.name.includes("흘려");
+
+     html+=`
+     <label>
+     <input type="checkbox" ${t.done?"checked":""}
+     onclick="toggle('${s}',${i})">
+     ${t.name} (${t.part||""})
+     </label>
+     `;
+
+     // 🎧 듣기면 입력칸
+     if(isListening){
+       html+=`
+       <input type="number" value="${t.minutes||0}" 
+       onchange="updateMinutes('${s}',${i}, this.value)"> 분
+       `;
+     } else {
+       html+=` (${t.minutes||0}분)`;
+     }
+
+     html+=`<br>`;
+   });
+
+   html+="</div>";
+   subjects.innerHTML+=html;
+ });
+
+ drawToday(done,total);
+ drawMonth();
+ drawListen();
+}
+
+// 오늘
+function drawToday(done,total){
+ let ctx=document.getElementById("todayChart").getContext("2d");
+ if(todayChart) todayChart.destroy();
+
+ todayChart=new Chart(ctx,{
+  type:"doughnut",
+  data:{labels:["완료","미완료"],
+  datasets:[{data:total?[done,total-done]:[0,1]}]},
+  options:{responsive:false}
+ });
+}
+
+// 한달
+function drawMonth(){
+ let u=curUser();
+ if(!u)return;
+
+ let days=[],vals=[];
+ let t=new Date();
+
+ for(let i=0;i<30;i++){
+  let d=new Date();
+  d.setDate(t.getDate()-i);
+  let s=d.toISOString().slice(0,10);
+
+  let day=data[u].logs[s];
+  let total=0, done=0;
+
+  if(day){
+   for(let sub in day){
+    day[sub].forEach(t=>{
+     total++;
+     if(t.done) done++;
+    });
+   }
+  }
+
+  days.unshift(s.slice(5));
+  vals.unshift(total? Math.round(done/total*100):0);
  }
+
+ let ctx=document.getElementById("monthChart").getContext("2d");
+ if(monthChart) monthChart.destroy();
+
+ monthChart=new Chart(ctx,{
+  data:{
+   labels:days,
+   datasets:[
+    {type:"bar", data:vals},
+    {type:"line", data:vals}
+   ]
+  },
+  options:{responsive:false}
+ });
+}
+
+// 듣기
+function drawListen(){
+ let u=curUser();
+ if(!u)return;
+
+ let days=[],f=[],p=[];
+ let t=new Date();
+
+ for(let i=0;i<30;i++){
+  let d=new Date();
+  d.setDate(t.getDate()-i);
+  let s=d.toISOString().slice(0,10);
+
+  let day=data[u].logs[s];
+  let ff=0,pp=0;
+
+  if(day){
+   for(let sub in day){
+    day[sub].forEach(t=>{
+     if(t.name.includes("집중")) ff+=t.minutes||0;
+     if(t.name.includes("흘려")) pp+=t.minutes||0;
+    });
+   }
+  }
+
+  days.unshift(s.slice(5));
+  f.unshift(ff);
+  p.unshift(pp);
+ }
+
+ let ctx=document.getElementById("listenChart").getContext("2d");
+ if(listenChart) listenChart.destroy();
+
+ listenChart=new Chart(ctx,{
+  type:"line",
+  data:{
+   labels:days,
+   datasets:[
+    {label:"집중듣기", data:f},
+    {label:"흘려듣기", data:p}
+   ]
+  },
+  options:{responsive:false}
+ });
 }
 
 // 시작
-ensureUser();
-refreshUsers();
-userSelect.selectedIndex=0;
-currentUser=userSelect.value;
-
-let today=new Date().toISOString().slice(0,10);
-currentDate=today;
-
-makeDates();
+updateUser();
+genDates();
 render();
 </script>
 
