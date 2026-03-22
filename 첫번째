@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>공부 스케줄 트래커</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body { font-family: sans-serif; padding:20px; }
+h2 { margin-top:30px; }
+button { margin:5px; }
+.card { border:1px solid #ddd; padding:10px; margin:10px 0; }
+</style>
+</head>
+<body>
+
+<h1>📚 공부 스케줄 트래커</h1>
+
+<h2>과목 추가</h2>
+<input id="subjectInput" placeholder="과목 입력">
+<button onclick="addSubject()">추가</button>
+
+<div id="subjects"></div>
+
+<h2>오늘 공부 체크</h2>
+<input type="date" id="date">
+<div id="studyArea"></div>
+
+<h2>📊 전체 진척도</h2>
+<canvas id="progressChart"></canvas>
+
+<script>
+let data = JSON.parse(localStorage.getItem("studyData")) || {};
+
+function save() {
+    localStorage.setItem("studyData", JSON.stringify(data));
+    render();
+}
+
+function addSubject() {
+    const subject = document.getElementById("subjectInput").value;
+    if (!subject) return;
+    data[subject] = [];
+    save();
+}
+
+function addTask(subject) {
+    const task = prompt("학습 내용 입력");
+    if (!task) return;
+    data[subject].push({ name: task, done: false });
+    save();
+}
+
+function toggleTask(subject, index) {
+    data[subject][index].done = !data[subject][index].done;
+    save();
+}
+
+function render() {
+    const subjectsDiv = document.getElementById("subjects");
+    const studyArea = document.getElementById("studyArea");
+    subjectsDiv.innerHTML = "";
+    studyArea.innerHTML = "";
+
+    let total = 0, done = 0;
+
+    for (let subject in data) {
+        let card = `<div class="card"><b>${subject}</b><br>`;
+        card += `<button onclick="addTask('${subject}')">내용 추가</button><br>`;
+
+        data[subject].forEach((t, i) => {
+            total++;
+            if (t.done) done++;
+
+            card += `
+            <label>
+            <input type="checkbox" ${t.done ? "checked" : ""} 
+            onclick="toggleTask('${subject}', ${i})">
+            ${t.name}
+            </label><br>`;
+        });
+
+        card += `</div>`;
+        subjectsDiv.innerHTML += card;
+    }
+
+    renderChart(done, total);
+}
+
+function renderChart(done, total) {
+    const ctx = document.getElementById('progressChart');
+    if (!ctx) return;
+
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['완료', '미완료'],
+            datasets: [{
+                data: [done, total - done]
+            }]
+        }
+    });
+}
+
+render();
+</script>
+
+</body>
+</html>
