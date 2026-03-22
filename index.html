@@ -6,10 +6,10 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body { font-family: sans-serif; padding:20px; }
-h2 { margin-top:30px; }
 button { margin:5px; }
 .card { border:1px solid #ddd; padding:10px; margin:10px 0; }
-.small-chart { width:300px; height:300px; } /* ✅ 차트 크기 축소 */
+.small-chart { width:300px; height:300px; }
+.date-btn { margin:3px; }
 </style>
 </head>
 <body>
@@ -21,9 +21,10 @@ button { margin:5px; }
 <button onclick="addUser()">추가</button>
 
 <select id="userSelect" onchange="render()"></select>
+<button onclick="deleteUser()">선택 이름 삭제</button>
 
-<h2>📅 날짜 선택</h2>
-<input type="date" id="date" onchange="render()">
+<h2>📅 날짜 선택 (일주일)</h2>
+<div id="dateButtons"></div>
 
 <h2>과목 추가</h2>
 <input id="subjectInput" placeholder="과목 입력">
@@ -37,28 +38,46 @@ button { margin:5px; }
 <script>
 let data = JSON.parse(localStorage.getItem("studyData")) || {};
 let chart;
+let selectedDate = null;
+
+// ✅ 기존 잘못된 과목 제거 (초기 한번)
+for (let user in data) {
+    if (data[user]["영어"] || data[user]["수학"] || data[user]["과학"]) {
+        delete data[user]["영어"];
+        delete data[user]["수학"];
+        delete data[user]["과학"];
+    }
+}
 
 function save() {
     localStorage.setItem("studyData", JSON.stringify(data));
     render();
 }
 
-// ✅ 사용자 추가
+// 👤 사용자 추가
 function addUser() {
     const input = document.getElementById("userInput");
     const name = input.value.trim();
     if (!name) return;
 
-    if (!data[name]) {
-        data[name] = {};
-    }
+    if (!data[name]) data[name] = {};
 
     input.value = "";
     updateUserSelect();
     save();
 }
 
-// ✅ 사용자 목록 업데이트
+// 👤 사용자 삭제
+function deleteUser() {
+    const user = document.getElementById("userSelect").value;
+    if (!user) return;
+
+    delete data[user];
+    updateUserSelect();
+    save();
+}
+
+// 사용자 목록
 function updateUserSelect() {
     const select = document.getElementById("userSelect");
     select.innerHTML = "";
@@ -68,35 +87,64 @@ function updateUserSelect() {
     }
 }
 
-// ✅ 현재 선택된 사용자/날짜 데이터 가져오기
-function getCurrentData() {
-    const user = document.getElementById("userSelect").value;
-    const date = document.getElementById("date").value;
+// 📅 일주일 날짜 생성
+function generateWeek() {
+    const container = document.getElementById("dateButtons");
+    container.innerHTML = "";
 
-    if (!user || !date) return null;
+    const today = new Date();
 
-    if (!data[user][date]) {
-        data[user][date] = {};
+    for (let i = 0; i < 7; i++) {
+        let d = new Date();
+        d.setDate(today.getDate() + i);
+
+        let str = d.toISOString().slice(0,10);
+
+        container.innerHTML += `
+        <button class="date-btn" onclick="selectDate('${str}')">
+        ${str.slice(5)}
+        </button>`;
     }
-
-    return data[user][date];
 }
 
-// ✅ 과목 추가
+// 날짜 선택
+function selectDate(date) {
+    selectedDate = date;
+    render();
+}
+
+// 현재 데이터
+function getCurrentData() {
+    const user = document.getElementById("userSelect").value;
+    if (!user || !selectedDate) return null;
+
+    if (!data[user][selectedDate]) {
+        data[user][selectedDate] = {};
+    }
+
+    return data[user][selectedDate];
+}
+
+// 과목 추가
 function addSubject() {
     const subject = document.getElementById("subjectInput").value.trim();
     const current = getCurrentData();
     if (!subject || !current) return;
 
-    if (!current[subject]) {
-        current[subject] = [];
-    }
+    if (!current[subject]) current[subject] = [];
 
     document.getElementById("subjectInput").value = "";
     save();
 }
 
-// ✅ 할 일 추가
+// 과목 삭제
+function deleteSubject(subject) {
+    const current = getCurrentData();
+    delete current[subject];
+    save();
+}
+
+// 할일 추가
 function addTask(subject) {
     const current = getCurrentData();
     const task = prompt("학습 내용 입력");
@@ -106,14 +154,21 @@ function addTask(subject) {
     save();
 }
 
-// ✅ 체크 토글
+// 할일 삭제
+function deleteTask(subject, index) {
+    const current = getCurrentData();
+    current[subject].splice(index,1);
+    save();
+}
+
+// 체크
 function toggleTask(subject, index) {
     const current = getCurrentData();
     current[subject][index].done = !current[subject][index].done;
     save();
 }
 
-// ✅ 화면 렌더링
+// 화면
 function render() {
     const subjectsDiv = document.getElementById("subjects");
     subjectsDiv.innerHTML = "";
@@ -124,8 +179,9 @@ function render() {
     let total = 0, done = 0;
 
     for (let subject in current) {
-        let card = `<div class="card"><b>${subject}</b><br>`;
-        card += `<button onclick="addTask('${subject}')">내용 추가</button><br>`;
+        let card = `<div class="card"><b>${subject}</b>
+        <button onclick="deleteSubject('${subject}')">❌</button><br>
+        <button onclick="addTask('${subject}')">내용 추가</button><br>`;
 
         current[subject].forEach((t, i) => {
             total++;
@@ -136,7 +192,9 @@ function render() {
             <input type="checkbox" ${t.done ? "checked" : ""} 
             onclick="toggleTask('${subject}', ${i})">
             ${t.name}
-            </label><br>`;
+            </label>
+            <button onclick="deleteTask('${subject}', ${i})">❌</button>
+            <br>`;
         });
 
         card += `</div>`;
@@ -146,7 +204,7 @@ function render() {
     renderChart(done, total);
 }
 
-// ✅ 차트
+// 차트
 function renderChart(done, total) {
     const ctx = document.getElementById('progressChart').getContext('2d');
 
@@ -160,14 +218,13 @@ function renderChart(done, total) {
                 data: total === 0 ? [0,1] : [done, total - done]
             }]
         },
-        options: {
-            responsive: false // ✅ 크기 고정
-        }
+        options: { responsive: false }
     });
 }
 
-// 초기 세팅
+// 초기 실행
 updateUserSelect();
+generateWeek();
 render();
 </script>
 
