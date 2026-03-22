@@ -9,11 +9,21 @@ body { font-family: sans-serif; padding:20px; }
 h2 { margin-top:30px; }
 button { margin:5px; }
 .card { border:1px solid #ddd; padding:10px; margin:10px 0; }
+.small-chart { width:300px; height:300px; } /* ✅ 차트 크기 축소 */
 </style>
 </head>
 <body>
 
 <h1>📚 공부 스케줄 트래커</h1>
+
+<h2>👤 이름 추가</h2>
+<input id="userInput" placeholder="이름 입력">
+<button onclick="addUser()">추가</button>
+
+<select id="userSelect" onchange="render()"></select>
+
+<h2>📅 날짜 선택</h2>
+<input type="date" id="date" onchange="render()">
 
 <h2>과목 추가</h2>
 <input id="subjectInput" placeholder="과목 입력">
@@ -21,53 +31,103 @@ button { margin:5px; }
 
 <div id="subjects"></div>
 
-<h2>오늘 공부 체크</h2>
-<input type="date" id="date">
-<div id="studyArea"></div>
-
 <h2>📊 전체 진척도</h2>
-<canvas id="progressChart"></canvas>
+<canvas id="progressChart" class="small-chart"></canvas>
 
 <script>
 let data = JSON.parse(localStorage.getItem("studyData")) || {};
+let chart;
 
 function save() {
     localStorage.setItem("studyData", JSON.stringify(data));
     render();
 }
 
+// ✅ 사용자 추가
+function addUser() {
+    const input = document.getElementById("userInput");
+    const name = input.value.trim();
+    if (!name) return;
+
+    if (!data[name]) {
+        data[name] = {};
+    }
+
+    input.value = "";
+    updateUserSelect();
+    save();
+}
+
+// ✅ 사용자 목록 업데이트
+function updateUserSelect() {
+    const select = document.getElementById("userSelect");
+    select.innerHTML = "";
+
+    for (let name in data) {
+        select.innerHTML += `<option value="${name}">${name}</option>`;
+    }
+}
+
+// ✅ 현재 선택된 사용자/날짜 데이터 가져오기
+function getCurrentData() {
+    const user = document.getElementById("userSelect").value;
+    const date = document.getElementById("date").value;
+
+    if (!user || !date) return null;
+
+    if (!data[user][date]) {
+        data[user][date] = {};
+    }
+
+    return data[user][date];
+}
+
+// ✅ 과목 추가
 function addSubject() {
-    const subject = document.getElementById("subjectInput").value;
-    if (!subject) return;
-    data[subject] = [];
+    const subject = document.getElementById("subjectInput").value.trim();
+    const current = getCurrentData();
+    if (!subject || !current) return;
+
+    if (!current[subject]) {
+        current[subject] = [];
+    }
+
+    document.getElementById("subjectInput").value = "";
     save();
 }
 
+// ✅ 할 일 추가
 function addTask(subject) {
+    const current = getCurrentData();
     const task = prompt("학습 내용 입력");
-    if (!task) return;
-    data[subject].push({ name: task, done: false });
+    if (!task || !current) return;
+
+    current[subject].push({ name: task, done: false });
     save();
 }
 
+// ✅ 체크 토글
 function toggleTask(subject, index) {
-    data[subject][index].done = !data[subject][index].done;
+    const current = getCurrentData();
+    current[subject][index].done = !current[subject][index].done;
     save();
 }
 
+// ✅ 화면 렌더링
 function render() {
     const subjectsDiv = document.getElementById("subjects");
-    const studyArea = document.getElementById("studyArea");
     subjectsDiv.innerHTML = "";
-    studyArea.innerHTML = "";
+
+    const current = getCurrentData();
+    if (!current) return;
 
     let total = 0, done = 0;
 
-    for (let subject in data) {
+    for (let subject in current) {
         let card = `<div class="card"><b>${subject}</b><br>`;
         card += `<button onclick="addTask('${subject}')">내용 추가</button><br>`;
 
-        data[subject].forEach((t, i) => {
+        current[subject].forEach((t, i) => {
             total++;
             if (t.done) done++;
 
@@ -86,21 +146,28 @@ function render() {
     renderChart(done, total);
 }
 
+// ✅ 차트
 function renderChart(done, total) {
-    const ctx = document.getElementById('progressChart');
-    if (!ctx) return;
+    const ctx = document.getElementById('progressChart').getContext('2d');
 
-    new Chart(ctx, {
+    if (chart) chart.destroy();
+
+    chart = new Chart(ctx, {
         type: 'doughnut',
         data: {
             labels: ['완료', '미완료'],
             datasets: [{
-                data: [done, total - done]
+                data: total === 0 ? [0,1] : [done, total - done]
             }]
+        },
+        options: {
+            responsive: false // ✅ 크기 고정
         }
     });
 }
 
+// 초기 세팅
+updateUserSelect();
 render();
 </script>
 
