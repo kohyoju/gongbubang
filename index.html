@@ -9,221 +9,276 @@ body { font-family: sans-serif; padding:20px; }
 button { margin:5px; }
 .card { border:1px solid #ddd; padding:10px; margin:10px 0; }
 .small-chart { width:300px; height:300px; }
-.date-btn { margin:3px; }
+.big-chart { width:600px; height:300px; margin-top:20px; }
 </style>
 </head>
 <body>
 
 <h1>📚 공부 스케줄 트래커</h1>
 
-<h2>👤 이름 추가</h2>
-<input id="userInput" placeholder="이름 입력">
+<input id="userInput" placeholder="이름">
 <button onclick="addUser()">추가</button>
-
 <select id="userSelect" onchange="render()"></select>
-<button onclick="deleteUser()">선택 이름 삭제</button>
 
-<h2>📅 날짜 선택 (일주일)</h2>
 <div id="dateButtons"></div>
 
-<h2>과목 추가</h2>
-<input id="subjectInput" placeholder="과목 입력">
+<input id="subjectInput" placeholder="과목">
 <button onclick="addSubject()">추가</button>
 
 <div id="subjects"></div>
 
-<h2>📊 전체 진척도</h2>
-<canvas id="progressChart" class="small-chart"></canvas>
+<h3>📊 오늘 진척도</h3>
+<canvas id="todayChart" class="small-chart"></canvas>
+
+<h3>📊 한달 전체 진척도</h3>
+<canvas id="monthChart" class="big-chart"></canvas>
+
+<h3>🎧 듣기 시간 (집중/흘려)</h3>
+<canvas id="listenChart" class="big-chart"></canvas>
 
 <script>
 let data = JSON.parse(localStorage.getItem("studyData")) || {};
-let chart;
+let todayChart, monthChart, listenChart;
 let selectedDate = null;
 
-// ✅ 기존 잘못된 과목 제거 (초기 한번)
-for (let user in data) {
-    if (data[user]["영어"] || data[user]["수학"] || data[user]["과학"]) {
-        delete data[user]["영어"];
-        delete data[user]["수학"];
-        delete data[user]["과학"];
-    }
-}
-
+// 저장
 function save() {
     localStorage.setItem("studyData", JSON.stringify(data));
     render();
 }
 
-// 👤 사용자 추가
+// 사용자
 function addUser() {
-    const input = document.getElementById("userInput");
-    const name = input.value.trim();
+    let name = userInput.value.trim();
     if (!name) return;
-
     if (!data[name]) data[name] = {};
-
-    input.value = "";
-    updateUserSelect();
+    userInput.value = "";
+    updateUser();
     save();
 }
 
-// 👤 사용자 삭제
-function deleteUser() {
-    const user = document.getElementById("userSelect").value;
-    if (!user) return;
-
-    delete data[user];
-    updateUserSelect();
-    save();
-}
-
-// 사용자 목록
-function updateUserSelect() {
-    const select = document.getElementById("userSelect");
-    select.innerHTML = "";
-
-    for (let name in data) {
-        select.innerHTML += `<option value="${name}">${name}</option>`;
+function updateUser() {
+    userSelect.innerHTML = "";
+    for (let u in data) {
+        userSelect.innerHTML += `<option>${u}</option>`;
     }
 }
 
-// 📅 일주일 날짜 생성
+// 날짜 버튼
 function generateWeek() {
-    const container = document.getElementById("dateButtons");
-    container.innerHTML = "";
-
-    const today = new Date();
+    let today = new Date();
+    dateButtons.innerHTML = "";
 
     for (let i = 0; i < 7; i++) {
         let d = new Date();
         d.setDate(today.getDate() + i);
-
         let str = d.toISOString().slice(0,10);
 
-        container.innerHTML += `
-        <button class="date-btn" onclick="selectDate('${str}')">
-        ${str.slice(5)}
-        </button>`;
+        dateButtons.innerHTML += 
+        `<button onclick="selectDate('${str}')">${str.slice(5)}</button>`;
     }
 }
 
-// 날짜 선택
-function selectDate(date) {
-    selectedDate = date;
+function selectDate(d) {
+    selectedDate = d;
     render();
 }
 
 // 현재 데이터
-function getCurrentData() {
-    const user = document.getElementById("userSelect").value;
-    if (!user || !selectedDate) return null;
+function current() {
+    let u = userSelect.value;
+    if (!u || !selectedDate) return null;
 
-    if (!data[user][selectedDate]) {
-        data[user][selectedDate] = {};
-    }
-
-    return data[user][selectedDate];
+    if (!data[u][selectedDate]) data[u][selectedDate] = {};
+    return data[u][selectedDate];
 }
 
-// 과목 추가
+// 과목
 function addSubject() {
-    const subject = document.getElementById("subjectInput").value.trim();
-    const current = getCurrentData();
-    if (!subject || !current) return;
+    let s = subjectInput.value.trim();
+    let c = current();
+    if (!s || !c) return;
 
-    if (!current[subject]) current[subject] = [];
-
-    document.getElementById("subjectInput").value = "";
+    if (!c[s]) c[s] = [];
+    subjectInput.value = "";
     save();
 }
 
-// 과목 삭제
-function deleteSubject(subject) {
-    const current = getCurrentData();
-    delete current[subject];
-    save();
-}
-
-// 할일 추가
+// 내용 추가 (🔥 업그레이드)
 function addTask(subject) {
-    const current = getCurrentData();
-    const task = prompt("학습 내용 입력");
-    if (!task || !current) return;
+    let c = current();
+    if (!c) return;
 
-    current[subject].push({ name: task, done: false });
-    save();
-}
+    let name = prompt("학습명 (예: 집중듣기 / 문제풀이)");
+    if (!name) return;
 
-// 할일 삭제
-function deleteTask(subject, index) {
-    const current = getCurrentData();
-    current[subject].splice(index,1);
+    let part = prompt("어느 파트?");
+    let minutes = prompt("몇 분 했어? (숫자)");
+
+    c[subject].push({
+        name,
+        part,
+        minutes: Number(minutes) || 0,
+        done: false
+    });
+
     save();
 }
 
 // 체크
-function toggleTask(subject, index) {
-    const current = getCurrentData();
-    current[subject][index].done = !current[subject][index].done;
+function toggleTask(s, i) {
+    let c = current();
+    c[s][i].done = !c[s][i].done;
     save();
 }
 
-// 화면
+// 렌더
 function render() {
-    const subjectsDiv = document.getElementById("subjects");
-    subjectsDiv.innerHTML = "";
+    let c = current();
+    subjects.innerHTML = "";
+    if (!c) return;
 
-    const current = getCurrentData();
-    if (!current) return;
+    let total=0, done=0;
 
-    let total = 0, done = 0;
+    for (let s in c) {
+        let html = `<div class="card"><b>${s}</b><br>
+        <button onclick="addTask('${s}')">추가</button><br>`;
 
-    for (let subject in current) {
-        let card = `<div class="card"><b>${subject}</b>
-        <button onclick="deleteSubject('${subject}')">❌</button><br>
-        <button onclick="addTask('${subject}')">내용 추가</button><br>`;
-
-        current[subject].forEach((t, i) => {
+        c[s].forEach((t,i)=>{
             total++;
             if (t.done) done++;
 
-            card += `
+            html += `
             <label>
-            <input type="checkbox" ${t.done ? "checked" : ""} 
-            onclick="toggleTask('${subject}', ${i})">
-            ${t.name}
-            </label>
-            <button onclick="deleteTask('${subject}', ${i})">❌</button>
-            <br>`;
+            <input type="checkbox" ${t.done?"checked":""}
+            onclick="toggleTask('${s}',${i})">
+            ${t.name} (${t.part||""}, ${t.minutes||0}분)
+            </label><br>`;
         });
 
-        card += `</div>`;
-        subjectsDiv.innerHTML += card;
+        html += "</div>";
+        subjects.innerHTML += html;
     }
 
-    renderChart(done, total);
+    renderToday(done,total);
+    renderMonth();
+    renderListen();
 }
 
-// 차트
-function renderChart(done, total) {
-    const ctx = document.getElementById('progressChart').getContext('2d');
+// 오늘 차트
+function renderToday(done,total){
+    let ctx = todayChartCanvas = document.getElementById("todayChart").getContext("2d");
+    if (todayChart) todayChart.destroy();
 
-    if (chart) chart.destroy();
-
-    chart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: ['완료', '미완료'],
-            datasets: [{
-                data: total === 0 ? [0,1] : [done, total - done]
-            }]
+    todayChart = new Chart(ctx,{
+        type:"doughnut",
+        data:{
+            labels:["완료","미완료"],
+            datasets:[{data: total? [done,total-done]:[0,1]}]
         },
-        options: { responsive: false }
+        options:{responsive:false}
     });
 }
 
-// 초기 실행
-updateUserSelect();
+// 📊 한달 진척도
+function renderMonth(){
+    let u = userSelect.value;
+    if (!u) return;
+
+    let days=[], values=[];
+
+    let today = new Date();
+
+    for (let i=0;i<30;i++){
+        let d = new Date();
+        d.setDate(today.getDate()-i);
+        let str = d.toISOString().slice(0,10);
+
+        let dayData = data[u][str];
+        let total=0, done=0;
+
+        if (dayData){
+            for (let s in dayData){
+                dayData[s].forEach(t=>{
+                    total++;
+                    if (t.done) done++;
+                });
+            }
+        }
+
+        days.unshift(str.slice(5));
+        values.unshift(total? Math.round(done/total*100):0);
+    }
+
+    let ctx = document.getElementById("monthChart").getContext("2d");
+    if (monthChart) monthChart.destroy();
+
+    monthChart = new Chart(ctx,{
+        data:{
+            labels:days,
+            datasets:[
+                {
+                    type:'bar',
+                    label:'진척도%',
+                    data:values
+                },
+                {
+                    type:'line',
+                    label:'추세',
+                    data:values
+                }
+            ]
+        }
+    });
+}
+
+// 🎧 듣기 그래프
+function renderListen(){
+    let u = userSelect.value;
+    if (!u) return;
+
+    let days=[], focus=[], passive=[];
+    let today = new Date();
+
+    for (let i=0;i<30;i++){
+        let d = new Date();
+        d.setDate(today.getDate()-i);
+        let str = d.toISOString().slice(0,10);
+
+        let f=0,p=0;
+        let dayData = data[u][str];
+
+        if (dayData){
+            for (let s in dayData){
+                dayData[s].forEach(t=>{
+                    if (t.name.includes("집중")) f+=t.minutes||0;
+                    if (t.name.includes("흘려")) p+=t.minutes||0;
+                });
+            }
+        }
+
+        days.unshift(str.slice(5));
+        focus.unshift(f);
+        passive.unshift(p);
+    }
+
+    let ctx = document.getElementById("listenChart").getContext("2d");
+    if (listenChart) listenChart.destroy();
+
+    listenChart = new Chart(ctx,{
+        type:'line',
+        data:{
+            labels:days,
+            datasets:[
+                {label:'집중듣기', data:focus},
+                {label:'흘려듣기', data:passive}
+            ]
+        }
+    });
+}
+
+// 시작
+updateUser();
 generateWeek();
 render();
 </script>
